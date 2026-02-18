@@ -24,6 +24,7 @@ class AchieveBot(commands.Bot):
         logger.info("--- Database ready ---")
 
         await self.load_extension("cogs.core")
+        await self.load_extension("cogs.admin")
 
         await self.tree.sync()
 

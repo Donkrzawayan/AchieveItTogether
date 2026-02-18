@@ -44,7 +44,9 @@ class Core(commands.Cog):
                         channel_id=interaction.channel_id,
                     )
                     self.logger.info(f"Goal '{goal_name}' created by {interaction.user.id}")
-                    await interaction.followup.send(f"Goal **{goal_name}** created!")
+                    await interaction.followup.send(
+                        f"Goal **{goal_name}** created!\n-# Locked to <#{interaction.channel_id}>"
+                    )
 
                 except IntegrityError:
                     await interaction.followup.send("Error creating goal.")
@@ -65,7 +67,9 @@ class Core(commands.Cog):
         if amount <= 0:
             return
 
-        self.logger.info(f"Command !{goal_name} called by {message.author} (Guild: {message.guild.id})")
+        self.logger.info(
+            f"!{goal_name} called by {message.author} (Guild: {message.guild.id}, channel: {message.channel.name})"
+        )
 
         async with async_session_factory() as session:
             async with session.begin():
@@ -73,21 +77,22 @@ class Core(commands.Cog):
 
                 goal = await repo.get_goal_by_name(message.guild.id, goal_name)
                 if not goal:
+                    self.logger.info(f"Non existing !{goal_name} called by {message.author}")
+                    return
+                if goal.channel_id is not None and goal.channel_id != message.channel.id:
+                    self.logger.info(f"Wrong channel !{goal_name} called by {message.author}")
                     return
 
                 user = await repo.get_or_create_user(message.author.id, message.author.name)
 
                 await repo.add_progress(goal.id, user.id, amount)
-
                 await session.flush()
                 total = await repo.get_total_progress(goal.id)
 
                 self.logger.info(f"User {user.username} added {amount} to {goal_name}")
 
                 await message.add_reaction("✅")
-                await message.channel.send(
-                    f"**{message.author.display_name}** added **{amount}** to **{goal_name}**!\nTotal: **{total}**"
-                )
+                await message.reply(f"Added **{amount}** to **{goal_name}**!\nTotal: **{total}**")
 
 
 async def setup(bot):

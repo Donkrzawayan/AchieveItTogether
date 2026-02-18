@@ -1,5 +1,5 @@
 from typing import Optional
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import User, Goal, Progress
@@ -47,3 +47,7 @@ class GoalRepository:
         result = await self.session.execute(stmt)
         total = result.scalar()
         return total if total else 0
+
+    async def update_goal_channel(self, goal_id: int, channel_id: Optional[int]) -> None:
+        stmt = update(Goal).where(Goal.id == goal_id).values(channel_id=channel_id)
+        await self.session.execute(stmt)

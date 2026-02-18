@@ -4,6 +4,7 @@ from pydantic import SecretStr
 
 class Settings(BaseSettings):
     DISCORD_TOKEN: SecretStr
+    ALLOWED_ROLE_ID: int
 
     POSTGRES_USER: str
     POSTGRES_PASSWORD: SecretStr

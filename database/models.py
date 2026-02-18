@@ -23,8 +23,8 @@ class Goal(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    channel_id: Mapped[int] = mapped_column(BigInteger)
-    creator_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    channel_id: Mapped[int] = mapped_column(BigInteger, nullable=True)
+    creator_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=True)
     name: Mapped[str] = mapped_column(String(50))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
