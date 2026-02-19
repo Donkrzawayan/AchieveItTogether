@@ -7,6 +7,7 @@ from discord.ext import commands, tasks
 from cogs.ui.notifications import GuildSelectView, get_reminder_setup_data
 from database.base import async_session_factory
 from database.repository import GoalRepository
+from utils.helpers import get_or_fetch_user
 
 logger = logging.getLogger(__name__)
 
@@ -63,17 +64,6 @@ class Notifications(commands.Cog):
                     ephemeral=True,
                 )
 
-    async def _get_discord_user(self, user_id: int) -> discord.User | None:
-        """Get the user from the cache, and if it's not there, fetch it from the API."""
-        user = self.bot.get_user(user_id)
-        if user:
-            return user
-        try:
-            return await self.bot.fetch_user(user_id)
-        except discord.NotFound:
-            logger.warning(f"User {user_id} not found.")
-            return None
-
     async def _send_reminder_dm(self, user: discord.User, goal_name: str, channel_id: int | None):
         description = f"Hey! Remember to work on your goal: **{goal_name}** today!"
         if channel_id:
@@ -92,7 +82,7 @@ class Notifications(commands.Cog):
 
     async def _process_single_reminder(self, repo, reminder, today_date):
         try:
-            user = await self._get_discord_user(reminder.user_id)
+            user = await get_or_fetch_user(self.bot, reminder.user_id)
             if not user:
                 return
 

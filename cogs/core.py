@@ -9,18 +9,19 @@ from sqlalchemy.exc import IntegrityError
 from database.base import async_session_factory
 from database.models import Milestone
 from database.repository import GoalRepository
+from utils.helpers import get_or_fetch_user
 
 
 class Core(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.logger = logging.getLogger(__name__)
-        # Regex: !goal 123
-        self.progress_pattern = re.compile(r"^!(\w+)\s+(\d+)$")
+        # Regex: !<goal> <amount> [@<user>]
+        self.progress_pattern = re.compile(r"^!(\w+)\s+(\d+)(?:\s+<@!?(\d+)>)?\s*$")
 
     def _build_progress_message(
         self,
-        author: discord.Member,
+        target_user: discord.Member | discord.User,
         amount: int,
         goal_name: str,
         user_total: int,
@@ -29,7 +30,7 @@ class Core(commands.Cog):
         next_milestone: Optional[Milestone],
     ) -> str:
         msg = (
-            f"**{author.mention}** added **{amount}** to **{goal_name}**! (User total: **{user_total}**)\n"
+            f"**{amount}** added to **{goal_name}** for **{target_user.mention}**! (User total: **{user_total}**)\n"
             f"Total: **{new_total}**"
         )
 
@@ -40,7 +41,6 @@ class Core(commands.Cog):
 
         elif next_milestone:
             remaining = next_milestone.threshold - new_total
-
             if next_milestone.threshold > 0:
                 percent = (new_total / next_milestone.threshold) * 100
             else:
@@ -50,8 +50,49 @@ class Core(commands.Cog):
 
         return msg
 
+    async def _process_add_progress(
+        self, guild_id: int, channel_id: int, target_user: discord.Member | discord.User, amount: int, goal_name: str
+    ) -> tuple[str, str]:
+        """A helper method that handles the database. Returns a tuple: (status, message)"""
+        async with async_session_factory() as session:
+            async with session.begin():
+                repo = GoalRepository(session)
+
+                goal = await repo.get_goal_by_name(guild_id, goal_name)
+                if not goal:
+                    return "not_found", ""
+
+                if goal.channel_id is not None and goal.channel_id != channel_id:
+                    return "wrong_channel", ""
+
+                user = await repo.get_or_create_user(target_user.id, target_user.name)
+
+                await repo.add_progress(goal.id, user.id, amount)
+                await session.flush()
+
+                total = await repo.get_total_progress(goal.id)
+                user_total = await repo.get_user_progress(goal.id, user.id)
+                last_total = total - amount
+                reached_milestones = await repo.get_newly_reached_milestones(goal.id, last_total, total)
+
+                next_milestone = None
+                if not reached_milestones:
+                    next_milestone = await repo.get_next_milestone(goal.id, total)
+
+        response_msg = self._build_progress_message(
+            target_user=target_user,
+            amount=amount,
+            goal_name=goal_name,
+            user_total=user_total,
+            new_total=total,
+            reached_milestones=reached_milestones,
+            next_milestone=next_milestone,
+        )
+        return "success", response_msg
+
     @app_commands.command(name="create", description="Create a new goal (e.g., steps, books).")
     @app_commands.describe(name="The name of the goal (one word)")
+    @app_commands.guild_only()
     async def create_goal(self, interaction: discord.Interaction, name: str):
         goal_name = name.lower().strip()
         if not goal_name.isalnum():
@@ -85,10 +126,45 @@ class Core(commands.Cog):
                 except IntegrityError:
                     await interaction.followup.send("Error creating goal.")
 
+    @app_commands.command(name="add", description="Add progress to a goal.")
+    @app_commands.describe(
+        goal_name="The name of the goal", amount="The amount to add", user="Optional: Add progress for another user"
+    )
+    @app_commands.guild_only()
+    async def add_progress(
+        self, interaction: discord.Interaction, goal_name: str, amount: int, user: Optional[discord.Member] = None
+    ):
+        if amount <= 0:
+            await interaction.response.send_message("Amount must be greater than 0.", ephemeral=True)
+            return
+
+        target_user = user or interaction.user
+        goal_name_clean = goal_name.lower().strip()
+
+        status, response_msg = await self._process_add_progress(
+            guild_id=interaction.guild_id,
+            channel_id=interaction.channel_id,
+            target_user=target_user,
+            amount=amount,
+            goal_name=goal_name_clean,
+        )
+
+        if status == "not_found":
+            await interaction.response.send_message(
+                f"Goal **{goal_name_clean}** does not exist on this server.", ephemeral=True
+            )
+        elif status == "wrong_channel":
+            await interaction.response.send_message(
+                f"You can't add progress to **{goal_name_clean}** in this channel.", ephemeral=True
+            )
+        elif status == "success":
+            self.logger.info(f"User {target_user.name} added {amount} to {goal_name_clean} via Slash Command")
+            await interaction.response.send_message(response_msg)
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        """Listens for messages like '!steps 1000' and updates progress."""
-        if message.author.bot:
+        """Listens for messages like '!steps 1000' or '!steps 1000 @user' and updates progress."""
+        if message.author.bot or message.guild is None:
             return
 
         match = self.progress_pattern.match(message.content)
@@ -101,50 +177,31 @@ class Core(commands.Cog):
         if amount <= 0:
             return
 
+        target_user = message.author
+        if match.group(3):
+            target_id = int(match.group(3))
+            fetched_user = await get_or_fetch_user(self.bot, target_id, message.guild)
+            target_user = fetched_user if fetched_user else message.author
+
         self.logger.info(
-            f"!{goal_name} called by {message.author} (Guild: {message.guild.id}, channel: {message.channel.name})"
+            f"!{goal_name} called by {message.author.name} for {target_user.name} (Guild: {message.guild.id}, channel: {message.channel.name})"
         )
 
-        async with async_session_factory() as session:
-            async with session.begin():
-                repo = GoalRepository(session)
-
-                goal = await repo.get_goal_by_name(message.guild.id, goal_name)
-                if not goal:
-                    self.logger.info(f"Non existing !{goal_name} called by {message.author}")
-                    return
-                if goal.channel_id is not None and goal.channel_id != message.channel.id:
-                    self.logger.info(f"Wrong channel !{goal_name} called by {message.author}")
-                    return
-
-                user = await repo.get_or_create_user(message.author.id, message.author.name)
-
-                await repo.add_progress(goal.id, user.id, amount)
-                await session.flush()
-
-                total = await repo.get_total_progress(goal.id)
-                user_total = await repo.get_user_progress(goal.id, user.id)
-                last_total = total - amount
-                reached_milestones = await repo.get_newly_reached_milestones(goal.id, last_total, total)
-
-                next_milestone = None
-                if not reached_milestones:
-                    next_milestone = await repo.get_next_milestone(goal.id, total)
-
-        self.logger.info(f"User {user.username} added {amount} to {goal_name}")
-        await message.add_reaction("✅")
-
-        response_msg = self._build_progress_message(
-            author=message.author,
+        status, response_msg = await self._process_add_progress(
+            guild_id=message.guild.id,
+            channel_id=message.channel.id,
+            target_user=target_user,
             amount=amount,
             goal_name=goal_name,
-            user_total=user_total,
-            new_total=total,
-            reached_milestones=reached_milestones,
-            next_milestone=next_milestone,
         )
 
-        await message.reply(response_msg)
+        if status == "not_found":
+            self.logger.info(f"Non existing !{goal_name} called by {message.author}")
+        elif status == "wrong_channel":
+            self.logger.info(f"Wrong channel !{goal_name} called by {message.author}")
+        elif status == "success":
+            await message.add_reaction("✅")
+            await message.reply(response_msg)
 
 
 async def setup(bot):
