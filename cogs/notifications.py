@@ -4,7 +4,7 @@ from datetime import datetime
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from cogs.ui.notifications import ReminderView
+from cogs.ui.notifications import GuildSelectView, get_reminder_setup_data
 from database.base import async_session_factory
 from database.repository import GoalRepository
 
@@ -25,25 +25,43 @@ class Notifications(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         goal_name_clean = goal_name.lower().strip()
-        initial_days = []
-        initial_time = None
 
-        async with async_session_factory() as session:
-            repo = GoalRepository(session)
-            goal = await repo.get_goal_by_name(interaction.guild_id, goal_name_clean)
-            if not goal:
-                await interaction.followup.send(f"Goal **{goal_name_clean}** does not exist.", ephemeral=True)
+        if interaction.guild_id:
+            msg_content, view = await get_reminder_setup_data(
+                user_id=interaction.user.id, guild_id=interaction.guild_id, goal_name=goal_name_clean
+            )
+            await interaction.followup.send(content=msg_content, view=view, ephemeral=True)
+        else:
+            async with async_session_factory() as session:
+                repo = GoalRepository(session)
+                goals = await repo.get_all_goals_by_name(goal_name_clean)
+
+            valid_guilds = []
+            for goal in goals:
+                guild = self.bot.get_guild(goal.guild_id)
+                if guild and guild.get_member(interaction.user.id):
+                    valid_guilds.append((guild.id, guild.name))
+
+            if not valid_guilds:
+                await interaction.followup.send(
+                    f"Goal **{goal_name_clean}** does not exist on any of your shared servers.", ephemeral=True
+                )
                 return
 
-            reminder = await repo.get_reminder(goal.id, interaction.user.id)
-            if reminder:
-                initial_days = reminder.days_of_week
-                initial_time = reminder.time
+            elif len(valid_guilds) == 1:
+                guild_id, guild_name = valid_guilds[0]
+                msg_content, view = await get_reminder_setup_data(
+                    user_id=interaction.user.id, guild_id=guild_id, goal_name=goal_name_clean, guild_name=guild_name
+                )
+                await interaction.followup.send(content=msg_content, view=view, ephemeral=True)
 
-        view = ReminderView(interaction.guild_id, goal_name_clean, initial_days, initial_time)
-        await interaction.followup.send(
-            f"Please configure reminders for **{goal_name_clean}**:", view=view, ephemeral=True
-        )
+            else:
+                view = GuildSelectView(valid_guilds, goal_name_clean)
+                await interaction.followup.send(
+                    f"I found multiple goals named **{goal_name_clean}**. Please select the server:",
+                    view=view,
+                    ephemeral=True,
+                )
 
     async def _get_discord_user(self, user_id: int) -> discord.User | None:
         """Get the user from the cache, and if it's not there, fetch it from the API."""

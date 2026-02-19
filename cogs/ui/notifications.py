@@ -23,6 +23,30 @@ def get_readable_days(days: list[int]) -> str:
     return ", ".join([DAYS_MAP[d][2] for d in sorted(days)])
 
 
+async def get_reminder_setup_data(
+    user_id: int, guild_id: int, goal_name: str, guild_name: str | None = None
+) -> tuple[str, ui.View]:
+    """Gets data from the database and returns a tuple: (message content, UI view)."""
+    async with async_session_factory() as session:
+        repo = GoalRepository(session)
+        goal = await repo.get_goal_by_name(guild_id, goal_name)
+
+        if not goal:
+            suffix = f" on server **{guild_name}**" if guild_name else ""
+            return f"Goal **{goal_name}** does not exist{suffix}.", discord.utils.MISSING
+
+        reminder = await repo.get_reminder(goal.id, user_id)
+        initial_days = reminder.days_of_week if reminder else []
+        initial_time = reminder.time if reminder else None
+
+    view = ReminderView(guild_id, goal_name, initial_days, initial_time)
+
+    msg_content = f"Please configure reminders for **{goal_name}**"
+    msg_content += f" (Server: **{guild_name}**):" if guild_name else ":"
+
+    return msg_content, view
+
+
 # --- MODAL ---
 class TimeModal(ui.Modal, title="Set Reminder Time"):
     time_input = ui.TextInput(label="Time (HH:MM)", placeholder="e.g. 08:00 or 21:37", min_length=5, max_length=5)
@@ -36,7 +60,7 @@ class TimeModal(ui.Modal, title="Set Reminder Time"):
             self.time_input.default = default_time.strftime("%H:%M")
 
     async def on_submit(self, interaction: discord.Interaction):
-        time_str = self.time_input.value.strip().replace('.', ':')
+        time_str = self.time_input.value.strip().replace(".", ":")
 
         try:
             parsed_time = datetime.strptime(time_str, "%H:%M").time()
@@ -158,3 +182,32 @@ class ReminderView(ui.View):
         self.add_item(self.select)
         self.add_item(self.button)
         self.add_item(self.delete_btn)
+
+
+# --- GUILD SELECT (For DM) ---
+class GuildSelect(ui.Select):
+    def __init__(self, valid_guilds: list[tuple[int, str]], goal_name: str):
+        self.goal_name = goal_name
+
+        DISCORD_SELECT_OPTIONS_MAX = 25
+        options = [
+            discord.SelectOption(label=g_name, value=str(g_id))
+            for g_id, g_name in valid_guilds[:DISCORD_SELECT_OPTIONS_MAX]
+        ]
+        super().__init__(placeholder="Select a server...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        guild_id = int(self.values[0])
+        guild_name = next((opt.label for opt in self.options if opt.value == str(guild_id)), None)
+
+        msg_content, view = await get_reminder_setup_data(
+            user_id=interaction.user.id, guild_id=guild_id, goal_name=self.goal_name, guild_name=guild_name
+        )
+        await interaction.edit_original_response(content=msg_content, view=view)
+
+
+class GuildSelectView(ui.View):
+    def __init__(self, valid_guilds: list[tuple[int, str]], goal_name: str):
+        super().__init__()
+        self.add_item(GuildSelect(valid_guilds, goal_name))

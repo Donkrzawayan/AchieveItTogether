@@ -51,6 +51,11 @@ class GoalRepository:
         total = result.scalar()
         return total if total else 0
 
+    async def get_all_goals_by_name(self, name: str) -> Sequence[Goal]:
+        stmt = select(Goal).where(Goal.name == name)
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
     async def update_goal_channel(self, goal_id: int, channel_id: Optional[int]) -> None:
         stmt = update(Goal).where(Goal.id == goal_id).values(channel_id=channel_id)
         await self.session.execute(stmt)
