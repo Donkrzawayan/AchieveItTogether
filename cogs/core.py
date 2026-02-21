@@ -11,6 +11,7 @@ from database.models import Milestone
 from database.repository import GoalRepository
 from services.cache import GoalCacheService
 from utils.helpers import get_or_fetch_user
+from utils.i18n import get_text
 
 
 class Core(commands.Cog):
@@ -20,6 +21,7 @@ class Core(commands.Cog):
         self.FORBIDDEN_GOAL_NAMES = ["help"]
         # Regex: $<goal> <amount> [@<user>]
         self.progress_pattern = re.compile(r"^\$(\w+)\s+(\d+)(?:\s+<@!?(\d+)>)?\s*$")
+        self.MAX_ADDABLE_AMOUNT = 10_000_000
         self.cache_service = GoalCacheService(async_session_factory)
 
     def _build_progress_message(
@@ -57,6 +59,9 @@ class Core(commands.Cog):
         self, guild_id: int, channel_id: int, target_user: discord.Member | discord.User, amount: int, goal_name: str
     ) -> tuple[str, str]:
         """A helper method that handles the database. Returns a tuple: (status, message)"""
+        if amount > self.MAX_ADDABLE_AMOUNT:
+            return "amount_overflow", ""
+
         async with async_session_factory() as session:
             async with session.begin():
                 repo = GoalRepository(session)
@@ -166,6 +171,8 @@ class Core(commands.Cog):
             await interaction.response.send_message(
                 f"You can't add progress to **{goal_name_clean}** in this channel.", ephemeral=True
             )
+        elif status == "amount_overflow":
+            await interaction.response.send_message(get_text(interaction.locale, "add_progress.overflow"))
         elif status == "success":
             self.logger.info(f"User {target_user.name} added {amount} to {goal_name_clean} via Slash Command")
             await interaction.response.send_message(response_msg)
@@ -212,6 +219,9 @@ class Core(commands.Cog):
             self.logger.info(f"Non existing ${goal_name} called by {message.author}")
         elif status == "wrong_channel":
             self.logger.info(f"Wrong channel ${goal_name} called by {message.author}")
+        elif status == "amount_overflow":
+            response_msg = get_text(message.guild.preferred_locale, "add_progress.overflow")
+            await message.reply(response_msg)
         elif status == "success":
             await message.add_reaction("✅")
             await message.reply(response_msg)

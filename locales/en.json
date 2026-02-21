@@ -1,4 +1,7 @@
 {
+    "add_progress": {
+        "overflow": "You cannot add such a large amount."
+    },
     "help": {
         "title": "🛠️ How to use AchieveBot",
         "desc": "Welcome to the goal tracking bot! Here is how you can manage your progress:",

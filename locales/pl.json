@@ -1,4 +1,7 @@
 {
+    "add_progress": {
+        "overflow": "Nie można dodać tak dużej ilości."
+    },
     "help": {
         "title": "🛠️ Jak korzystać z AchieveBot",
         "desc": "Witaj! Jestem botem do śledzenia celów! Oto jak możesz zarządzać swoimi postępami:",
