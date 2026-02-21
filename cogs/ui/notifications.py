@@ -1,30 +1,21 @@
 import discord
 from discord import ui
 from datetime import datetime, time
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from database.base import async_session_factory
 from database.repository import GoalRepository
+from utils.i18n import get_text
 
 
-DAYS_MAP: List[Tuple[int, str, str]] = [
-    (0, "Monday", "Mon"),
-    (1, "Tuesday", "Tue"),
-    (2, "Wednesday", "Wed"),
-    (3, "Thursday", "Thu"),
-    (4, "Friday", "Fri"),
-    (5, "Saturday", "Sat"),
-    (6, "Sunday", "Sun"),
-]
-
-
-def get_readable_days(days: list[int]) -> str:
-    """Converts a list of integers [0, 2] to a string 'Mon, Wed'."""
-    return ", ".join([DAYS_MAP[d][2] for d in sorted(days)])
+def get_readable_days(locale: discord.Locale | None, days: list[int]) -> str:
+    """Converts a list of integers [0, 2] to a string based on locale."""
+    days_map = get_text(locale, "notify.days_map")
+    return ", ".join([days_map[d][1] for d in sorted(days)])
 
 
 async def get_reminder_setup_data(
-    user_id: int, guild_id: int, goal_name: str, guild_name: str | None = None
+    user_id: int, guild_id: int, goal_name: str, locale: discord.Locale | None, guild_name: str | None = None
 ) -> tuple[str, ui.View]:
     """Gets data from the database and returns a tuple: (message content, UI view)."""
     async with async_session_factory() as session:
@@ -39,7 +30,7 @@ async def get_reminder_setup_data(
         initial_days = reminder.days_of_week if reminder else []
         initial_time = reminder.time if reminder else None
 
-    view = ReminderView(guild_id, goal_name, initial_days, initial_time)
+    view = ReminderView(guild_id, goal_name, locale, initial_days, initial_time)
 
     msg_content = f"Please configure reminders for **{goal_name}**"
     msg_content += f" (Server: **{guild_name}**):" if guild_name else ":"
@@ -86,7 +77,7 @@ class TimeModal(ui.Modal, title="Set Reminder Time"):
                     goal_id=goal.id, user_id=interaction.user.id, days=self.selected_days, reminder_time=parsed_time
                 )
 
-        readable_days = get_readable_days(self.selected_days)
+        readable_days = get_readable_days(interaction.locale, self.selected_days)
         await interaction.edit_original_response(
             content=f"Reminder set for **{self.goal_name}**!\n📅 Days: **{readable_days}**\n🕒 Time: **{time_str}**",
             view=None,
@@ -95,17 +86,19 @@ class TimeModal(ui.Modal, title="Set Reminder Time"):
 
 # --- SELECT ---
 class DaysSelect(ui.Select):
-    def __init__(self, initial_days: list[int]):
+    def __init__(self, locale: discord.Locale | None, initial_days: list[int]):
         self.default_values = [str(day) for day in initial_days]
+        days_map = get_text(locale, "notify.days_map")
 
         if initial_days:
-            current_days_str = get_readable_days(initial_days)
-            placeholder_text = f"Current: {current_days_str} (Click to change)"
+            current_days_str = get_readable_days(locale, initial_days)
+            placeholder_text = get_text(locale, "notify.days_select.placeholder_current", days=current_days_str)
         else:
-            placeholder_text = "Select days of the week..."
+            placeholder_text = get_text(locale, "notify.days_select.placeholder_empty")
 
         options = []
-        for idx, full_name, _ in DAYS_MAP:
+        for idx, day_info in enumerate(days_map):
+            full_name = day_info[0]
             options.append(discord.SelectOption(label=full_name, value=str(idx)))
 
         super().__init__(placeholder=placeholder_text, min_values=1, max_values=7, options=options, row=0)
@@ -170,12 +163,17 @@ class DeleteButton(ui.Button):
 # --- VIEW ---
 class ReminderView(ui.View):
     def __init__(
-        self, guild_id: int, goal_name: str, initial_days: list[int] = [], initial_time: Optional[time] = None
+        self,
+        guild_id: int,
+        goal_name: str,
+        locale: discord.Locale | None,
+        initial_days: list[int] = [],
+        initial_time: Optional[time] = None,
     ):
         super().__init__()
         has_reminder = len(initial_days) > 0
 
-        self.select = DaysSelect(initial_days)
+        self.select = DaysSelect(locale, initial_days)
         self.button = ConfirmButton(guild_id, goal_name, self.select, initial_time)
         self.delete_btn = DeleteButton(guild_id, goal_name, has_reminder)
 
@@ -202,7 +200,7 @@ class GuildSelect(ui.Select):
         guild_name = next((opt.label for opt in self.options if opt.value == str(guild_id)), None)
 
         msg_content, view = await get_reminder_setup_data(
-            user_id=interaction.user.id, guild_id=guild_id, goal_name=self.goal_name, guild_name=guild_name
+            interaction.user.id, guild_id, self.goal_name, interaction.locale, guild_name
         )
         await interaction.edit_original_response(content=msg_content, view=view)
 

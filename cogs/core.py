@@ -11,6 +11,7 @@ from database.models import Goal, Milestone
 from database.repository import GoalRepository
 from services.cache import GoalCacheService
 from utils.helpers import get_or_fetch_user
+from utils.i18n import get_text
 
 
 class Core(commands.Cog):
@@ -216,10 +217,10 @@ class Core(commands.Cog):
             await message.add_reaction("✅")
             await message.reply(response_msg)
 
-    def _build_help_embed(self, active_goals: Sequence[Goal] = []) -> discord.Embed:
+    def _build_help_embed(self, locale: discord.Locale | None, active_goals: Sequence[Goal] = []) -> discord.Embed:
         embed = discord.Embed(
-            title="🛠️ How to use AchieveBot",
-            description="Welcome to the goal tracking bot! Here is how you can manage your progress:",
+            title=get_text(locale, "help.title"),
+            description=get_text(locale, "help.desc"),
             color=discord.Color.green(),
         )
 
@@ -233,48 +234,46 @@ class Core(commands.Cog):
 
             goals_text = "".join(goals_lines)
 
-            embed.add_field(name="1. Create a Goal or progress an active one:", value=goals_text, inline=False)
+            embed.add_field(name=get_text(locale, "help.active_goals"), value=goals_text, inline=False)
         else:
             embed.add_field(
-                name="1. Create a Goal",
-                value="Use `/create <name>` on desired channel to start tracking a new goal (e.g. `/create steps`).\n"
-                "-# This locks the goal to the channel you created it in.",
+                name=get_text(locale, "help.create_goal"),
+                value=get_text(locale, "help.create_goal_val"),
                 inline=False,
             )
 
         embed.add_field(
-            name="2. Log Progress",
-            value="Type `!<goal> <amount> [@<user>]` directly in the chat!\n"
-            "**Example:** `!steps 5000` or for someone else `!books 1 @User`\n"
-            "Or use slash command: `/add <goal> <amount> [@<user>]`.",
+            name=get_text(locale, "help.log_progress"),
+            value=get_text(locale, "help.log_progress_val"),
             inline=False,
         )
         embed.add_field(
-            name="3. Set Reminders",
-            value="Use `/notify <goal>` to set up recurring DMs so you never forget to update your progress!",
+            name=get_text(locale, "help.set_reminders"),
+            value=get_text(locale, "help.set_reminders_val"),
             inline=False,
         )
 
-        embed.set_footer(text="Tip: You can use !help or /help to see this message again.")
+        embed.set_footer(text=get_text(locale, "help.footer"))
         return embed
 
-    async def _process_help_message(self, guild_id):
+    async def _process_help_message(self, guild_id, locale: discord.Locale | None = None):
         active_goals = []
         if guild_id:
             async with async_session_factory() as session:
                 repo = GoalRepository(session)
                 active_goals = await repo.get_active_goals_for_guild(guild_id)
-        return self._build_help_embed(active_goals)
+        return self._build_help_embed(locale, active_goals)
 
     @app_commands.command(name="help", description="Show the help menu and commands.")
     async def help_slash(self, interaction: discord.Interaction):
-        embed = await self._process_help_message(interaction.guild_id)
+        embed = await self._process_help_message(interaction.guild_id, interaction.locale)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @commands.command(name="help")
     async def help_text(self, ctx: commands.Context):
         guild_id = ctx.guild.id if ctx.guild else None
-        embed = await self._process_help_message(guild_id)
+        locale = ctx.guild.preferred_locale if ctx.guild else None
+        embed = await self._process_help_message(guild_id, locale)
         await ctx.reply(embed=embed)
 
 

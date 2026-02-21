@@ -1,0 +1,50 @@
+{
+    "help": {
+        "title": "🛠️ How to use AchieveBot",
+        "desc": "Welcome to the goal tracking bot! Here is how you can manage your progress:",
+        "active_goals": "1. Create a Goal or progress an active one:",
+        "create_goal": "1. Create a Goal",
+        "create_goal_val": "Use `/create <name>` on desired channel to start tracking a new goal (e.g. `/create steps`).\n-# This locks the goal to the channel you created it in.",
+        "log_progress": "2. Log Progress",
+        "log_progress_val": "Type `!<goal> <amount> [@<user>]` directly in the chat!\n**Example:** `!steps 5000` or for someone else `!books 1 @User`\nOr use slash command: `/add <goal> <amount> [@<user>]`.",
+        "set_reminders": "3. Set Reminders",
+        "set_reminders_val": "Use `/notify <goal>` to set up recurring DMs so you never forget to update your progress!",
+        "footer": "Tip: You can use !help or /help to see this message again."
+    },
+    "notify": {
+        "days_map": [
+            [
+                "Monday",
+                "Mon"
+            ],
+            [
+                "Tuesday",
+                "Tue"
+            ],
+            [
+                "Wednesday",
+                "Wed"
+            ],
+            [
+                "Thursday",
+                "Thu"
+            ],
+            [
+                "Friday",
+                "Fri"
+            ],
+            [
+                "Saturday",
+                "Sat"
+            ],
+            [
+                "Sunday",
+                "Sun"
+            ]
+        ],
+        "days_select": {
+            "placeholder_empty": "Select days of the week...",
+            "placeholder_current": "Current: {days} (Click to change)"
+        }
+    }
+}

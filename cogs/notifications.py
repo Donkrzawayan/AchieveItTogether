@@ -29,7 +29,7 @@ class Notifications(commands.Cog):
 
         if interaction.guild_id:
             msg_content, view = await get_reminder_setup_data(
-                user_id=interaction.user.id, guild_id=interaction.guild_id, goal_name=goal_name_clean
+                interaction.user.id, interaction.guild_id, goal_name_clean, interaction.locale
             )
             await interaction.followup.send(content=msg_content, view=view, ephemeral=True)
         else:
@@ -52,7 +52,7 @@ class Notifications(commands.Cog):
             elif len(valid_guilds) == 1:
                 guild_id, guild_name = valid_guilds[0]
                 msg_content, view = await get_reminder_setup_data(
-                    user_id=interaction.user.id, guild_id=guild_id, goal_name=goal_name_clean, guild_name=guild_name
+                    interaction.user.id, guild_id, goal_name_clean, interaction.locale, guild_name
                 )
                 await interaction.followup.send(content=msg_content, view=view, ephemeral=True)
 
