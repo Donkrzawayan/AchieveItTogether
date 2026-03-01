@@ -24,6 +24,9 @@ class Core(commands.Cog):
         self.MAX_ADDABLE_AMOUNT = 10_000_000
         self.cache_service = GoalCacheService(async_session_factory)
 
+    def _format(self, number: int):
+        return f"{number:,}".replace(",", "\xa0")
+
     def _build_progress_message(
         self,
         target_user: discord.Member | discord.User,
@@ -34,24 +37,26 @@ class Core(commands.Cog):
         reached_milestones: Sequence[Milestone],
         next_milestone: Optional[Milestone],
     ) -> str:
+        user_total_str = self._format(user_total)
         msg = (
-            f"**{amount}** added to **{goal_name}** for **{target_user.mention}**! (User total: **{user_total}**)\n"
-            f"Total: **{new_total}**"
+            f"**{amount}** added to **{goal_name}** for **{target_user.mention}**! (User total: **{user_total_str}**)\n"
+            f"Total: **{self._format(new_total)}**"
         )
 
         if reached_milestones:
             msg += "\n\n🎉 **MILESTONE REACHED!** 🎉"
             for ms in reached_milestones:
-                msg += f"\n🏆 **{ms.name}** ({ms.threshold})"
+                msg += f"\n🏆 **{ms.name}** ({self._format(ms.threshold)})"
 
         elif next_milestone:
-            remaining = next_milestone.threshold - new_total
+            remaining = self._format(next_milestone.threshold - new_total)
             if next_milestone.threshold > 0:
                 percent = (new_total / next_milestone.threshold) * 100
             else:
                 percent = 100.0
 
-            msg += f"\nNext milestone: **{next_milestone.name}** in **{remaining}**/{next_milestone.threshold} ({percent:.1f}%)"
+            next_threshold = self._format(next_milestone.threshold)
+            msg += f"\nNext milestone: **{next_milestone.name}** in **{remaining}**/{next_threshold} ({percent:.1f}%)"
 
         return msg
 
