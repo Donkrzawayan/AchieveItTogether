@@ -1,5 +1,5 @@
 discord.py
 python-dotenv
 sqlalchemy
-asyncpg
+aiosqlite
 pydantic-settings

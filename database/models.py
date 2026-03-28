@@ -1,7 +1,6 @@
 from datetime import datetime, date, time
 from typing import List
-from sqlalchemy import BigInteger, String, ForeignKey, Time, Date, UniqueConstraint, func, Integer
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy import BigInteger, String, ForeignKey, Time, Date, UniqueConstraint, func, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import DateTime
 
@@ -79,7 +78,7 @@ class Reminder(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
 
     # Store the days of the week as a list of integers (0=Monday, 6=Sunday)
-    days_of_week: Mapped[List[int]] = mapped_column(ARRAY(Integer))
+    days_of_week: Mapped[List[int]] = mapped_column(JSON)
     time: Mapped[time] = mapped_column(Time, nullable=False)
     last_sent_date: Mapped[date] = mapped_column(Date, nullable=True)
 
