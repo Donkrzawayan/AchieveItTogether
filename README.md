@@ -11,14 +11,14 @@ Whether your server is tracking daily steps, reading books, or learning new skil
 * **Smart Reminders (UI)**: Features an intuitive, interactive UI (Dropdowns & Modals) for setting up recurring DM reminders for specific days of the week.
 * **Multi-language Support (i18n)**: Fully supports English and partially Polish out of the box. The bot automatically detects the user's Discord app language for slash commands!
 * **Highly Optimized**: Uses a fast in-memory Lazy Loading Cache (`services/cache.py`) to minimize database queries while reading chat messages.
-* **Docker Ready**: Easily deployable using the provided `Dockerfile` and `docker-compose.yml`.
+* **Deployment Flexibility**: Easily deployable via Docker or natively on low-end servers (like Alpine Linux LXC containers with low RAM).
 
 ## Tech Stack
 
 * **Language**: Python 3.14
 * **Framework**: [Discord.py](https://github.com/Rapptz/discord.py)
-* **Database**: PostgreSQL with SQLAlchemy (Async)
-* **Deployment**: Docker & Docker Compose
+* **Database**: SQLite with SQLAlchemy (Async via `aiosqlite`)
+* **Deployment**: Docker & Docker Compose or Bare Metal
 
 ## Commands Overview
 
@@ -41,8 +41,8 @@ The recommended way to run the bot is via Docker.
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/Donkrzawayan/AchiveItTogether.git
-cd AchiveItTogether
+git clone https://github.com/Donkrzawayan/AchieveItTogether.git
+cd AchieveItTogether
 ```
 
 ### 2. Configure Environment Variables
@@ -51,17 +51,32 @@ Create a .env file in the root directory.
 # Discord Configuration
 DISCORD_TOKEN=discord_bot_token
 ALLOWED_ROLE_ID=123456789012345678 # ID of the role allowed to manage locking goals to channels
-
-# Database Configuration
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=secure_password
-POSTGRES_DB=achive_db
-POSTGRES_HOST=db
-POSTGRES_PORT=5432
 ```
 
-### 3. Run with Docker
-Build and start the containers (Bot + Database).
+### 3a. Method 1: Docker (Recommended)
+The easiest way to run the bot.
 ```bash
 docker-compose up -d --build
 ```
+
+### 3b. Method 2: Bare Metal / Alpine Linux (Low RAM)
+Perfect for extremely low-budget VPS or LXC containers (e.g., 256MB RAM).
+
+```sh
+# Install system dependencies:
+apk update
+apk add python3 py3-pip git tmux sqlite
+# Create and activate a virtual environment:
+python3 -m venv venv
+source venv/bin/activate
+# Install Python packages:
+pip install --no-cache-dir -r requirements.txt
+# Run the bot in the background (using tmux):
+tmux new-session -d -s bot_session 'python main.py'
+```
+(To view the logs later, use `tmux attach -t bot_session`. To detach, press `Ctrl+B, D`.)
+
+## Backups (`Backup-Db.ps1`)
+
+Because the bot uses SQLite, the database is stored in a single file (`achievebot.db`).  
+To perform safe remote backups use the included PowerShell script (`Backup-Db.ps1`) from local Windows machine.
