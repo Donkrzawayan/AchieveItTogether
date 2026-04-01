@@ -3,3 +3,4 @@ python-dotenv
 sqlalchemy
 aiosqlite
 pydantic-settings
+python-i18n
