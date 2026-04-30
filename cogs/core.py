@@ -20,7 +20,7 @@ class Core(commands.Cog):
         self.logger = logging.getLogger(__name__)
         self.FORBIDDEN_GOAL_NAMES = ["help"]
         # Regex: $<goal> <amount> [@<user>]
-        self.progress_pattern = re.compile(r"^\$(\w+)\s+(\d+)(?:\s+<@!?(\d+)>)?\s*$")
+        self.progress_pattern = re.compile(r"^\$(\w+)\s+(?:(\d+)\s+<@!?(\d+)>|<@!?(\d+)>\s+(\d+)|(\d+))\s*$")
         self.MAX_ADDABLE_AMOUNT = 10_000_000
         self.cache_service = GoalCacheService(async_session_factory)
 
@@ -184,7 +184,7 @@ class Core(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        """Listens for messages like '$steps 1000' or '$steps 1000 @user' and updates progress."""
+        """Listens for messages like '$steps 1000' or '$steps 1000 @user' or '$steps @user 1000' and updates progress."""
         if message.author.bot or message.guild is None:
             return
 
@@ -193,7 +193,24 @@ class Core(commands.Cog):
             return
 
         goal_name = match.group(1).lower()
-        amount = int(match.group(2))
+        target_id = None
+        amount = 0
+
+        # Groups:
+        # 1: goal_name
+        # 2: amount (format: amount @user)
+        # 3: user_id (format: amount @user)
+        # 4: user_id (format: @user amount)
+        # 5: amount (format: @user amount)
+        # 6: amount (format: amount)
+        if match.group(2):  # Format: $<goal> <amount> [@user]
+            amount = int(match.group(2))
+            target_id = int(match.group(3))
+        elif match.group(5):  # Format: $<goal> [@user] <amount>
+            amount = int(match.group(5))
+            target_id = int(match.group(4))
+        elif match.group(6):  # Format: $<goal> <amount>
+            amount = int(match.group(6))
 
         if amount <= 0:
             return
@@ -203,8 +220,7 @@ class Core(commands.Cog):
             return
 
         target_user = message.author
-        if match.group(3):
-            target_id = int(match.group(3))
+        if target_id:
             fetched_user = await get_or_fetch_user(self.bot, target_id, message.guild)
             target_user = fetched_user if fetched_user else message.author
 
