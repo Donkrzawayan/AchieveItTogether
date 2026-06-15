@@ -19,8 +19,8 @@ class Core(commands.Cog):
         self.bot = bot
         self.logger = logging.getLogger(__name__)
         self.FORBIDDEN_GOAL_NAMES = ["help"]
-        # Regex: $<goal> <amount> [@<user>]
-        self.progress_pattern = re.compile(r"^\$(\w+)\s+(?:(\d+)\s+<@!?(\d+)>|<@!?(\d+)>\s+(\d+)|(\d+))\s*$")
+        # Regex: $<goal> ...
+        self.progress_pattern = re.compile(r"^\$(\w+)\s+(.+)$")
         self.MAX_ADDABLE_AMOUNT = 10_000_000
         self.cache_service = GoalCacheService(async_session_factory)
 
@@ -188,35 +188,34 @@ class Core(commands.Cog):
         if message.author.bot or message.guild is None:
             return
 
-        match = self.progress_pattern.match(message.content)
+        match = self.progress_pattern.match(message.content.strip())
         if not match:
             return
 
         goal_name = match.group(1).lower()
+        is_valid = await self.cache_service.is_valid_goal(message.guild.id, goal_name)
+        if not is_valid:
+            return
+        
+        args = match.group(2).split()
+        if len(args) > 2 or len(args) == 0:
+            return
+
         target_id = None
         amount = 0
 
-        # Groups:
-        # 1: goal_name
-        # 2: amount (format: amount @user)
-        # 3: user_id (format: amount @user)
-        # 4: user_id (format: @user amount)
-        # 5: amount (format: @user amount)
-        # 6: amount (format: amount)
-        if match.group(2):  # Format: $<goal> <amount> [@user]
-            amount = int(match.group(2))
-            target_id = int(match.group(3))
-        elif match.group(5):  # Format: $<goal> [@user] <amount>
-            amount = int(match.group(5))
-            target_id = int(match.group(4))
-        elif match.group(6):  # Format: $<goal> <amount>
-            amount = int(match.group(6))
+        for arg in args:
+            mention_match = re.match(r"^<@!?(\d+)>$", arg)
+            if mention_match:
+                target_id = int(mention_match.group(1))
+            else:
+                arg = arg.replace(",", "").replace(".", "")
+                try:
+                    amount = int(arg)
+                except ValueError:
+                    return
 
         if amount <= 0:
-            return
-
-        is_valid = await self.cache_service.is_valid_goal(message.guild.id, goal_name)
-        if not is_valid:
             return
 
         target_user = message.author
